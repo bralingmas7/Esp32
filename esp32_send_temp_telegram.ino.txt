@@ -1,0 +1,95 @@
+#include <WiFi.h>
+#include <HTTPClient.h>
+#include <DHT.h>
+
+#define DHTPIN 4          // Pin data DHT22 ke GPIO4 (ubah sesuai wiring)
+#define DHTTYPE DHT22     // Tipe sensor
+
+const char* ssid = "NAMA_WIFI";
+const char* password = "PASSWORD_WIFI";
+const char* telegramBotToken = "123456789:AA...";  // Token bot telegram
+const char* chat_id = "123456789";                // Chat ID tujuan
+
+DHT dht(DHTPIN, DHTTYPE);
+
+void setup() {
+  Serial.begin(115200);
+  dht.begin();
+
+  WiFi.begin(ssid, password);
+  Serial.print("Connecting to WiFi");
+  while (WiFi.status() != WL_CONNECTED) {
+    delay(500);
+    Serial.print(".");
+  }
+  Serial.println("\nConnected!");
+}
+
+void loop() {
+  float suhu = dht.readTemperature();  // Celcius
+  float kelembaban = dht.readHumidity();
+
+  if (isnan(suhu) || isnan(kelembaban)) {
+    Serial.println("Gagal baca sensor DHT!");
+    delay(10000);
+    return;
+  }
+
+  String message = "Suhu: " + String(suhu, 1) + " °C\nKelembaban: " + String(kelembaban, 1) + " %";
+  sendTelegramMessage(message);
+
+  delay(60000); // Kirim tiap 60 detik
+}
+
+void sendTelegramMessage(String message) {
+  if (WiFi.status() == WL_CONNECTED) {
+    HTTPClient http;
+    String url = "https://api.telegram.org/bot" + String(telegramBotToken) +
+                 "/sendMessage?chat_id=" + String(chat_id) +
+                 "&text=" + urlencode(message);
+
+    http.begin(url);
+    int httpCode = http.GET();
+
+    if (httpCode > 0) {
+      String payload = http.getString();
+      Serial.println(payload);
+    } else {
+      Serial.println("Gagal kirim pesan");
+    }
+    http.end();
+  } else {
+    Serial.println("WiFi Disconnected");
+  }
+}
+
+// Fungsi sederhana untuk urlencode
+String urlencode(String str) {
+  String encodedString = "";
+  char c;
+  char code0;
+  char code1;
+  char code2;
+  for (int i =0; i < str.length(); i++){
+    c=str.charAt(i);
+    if (c == ' '){
+      encodedString += '+';
+    } else if (isalnum(c)){
+      encodedString += c;
+    } else{
+      code1=(c & 0xf)+'0';
+      if ((c & 0xf) >9){
+        code1=(c & 0xf) - 10 + 'A';
+      }
+      c = (c>>4)&0xf;
+      code0=c+'0';
+      if (c > 9){
+        code0=c - 10 + 'A';
+      }
+      encodedString += '%';
+      encodedString += code0;
+      encodedString += code1;
+    }
+  }
+  return encodedString;
+}
